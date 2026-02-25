@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="001" author="paras">
+        <createTable tableName="rate_limit_rules">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="rule_name" type="VARCHAR(100)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="endpoint_pattern" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="http_method" type="VARCHAR(10)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="limit_count" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="window_seconds" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="algorithm" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="identifier_type" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_tier" type="VARCHAR(20)"/>
+            <column name="is_active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP"/>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP"/>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>
