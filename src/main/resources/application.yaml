@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: RateSentinel
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/rate_sentinel_db
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: pj458926@gmail.com
+    password: your-app-password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+server:
+  port: 8080
+
+rate-sentinel:
+  default-limit: 100
+  default-window-seconds: 60
+  algorithm: SLIDING_WINDOW_COUNTER
+  redis-fallback: FAIL_OPEN
+  alert-threshold: 50
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      redis:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
