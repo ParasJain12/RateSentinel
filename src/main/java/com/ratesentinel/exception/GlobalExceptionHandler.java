@@ -1,6 +1,7 @@
 package com.ratesentinel.exception;
 
 import com.ratesentinel.algorithm.RateLimitResult;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,6 +53,35 @@ public class GlobalExceptionHandler {
         response.put("timestamp", LocalDateTime.now().toString());
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+
+    // Add this handler method
+    @ExceptionHandler(CallNotPermittedException.class)
+    public ResponseEntity<Map<String, Object>> handleCircuitBreakerOpen(
+            CallNotPermittedException ex) {
+        log.warn("Circuit breaker is OPEN: {}", ex.getMessage());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", 200);
+        response.put("message", "Request processed in degraded mode");
+        response.put("note", "Cache unavailable, serving from database");
+        response.put("timestamp", LocalDateTime.now().toString());
+
+        return ResponseEntity.ok(response);
+    }
+
+    // Also add handler for general Redis errors
+    @ExceptionHandler(org.redisson.client.RedisException.class)
+    public ResponseEntity<Map<String, Object>> handleRedisException(
+            RuntimeException ex) {
+        log.error("Redis error caught at handler level: {}", ex.getMessage());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", 200);
+        response.put("message", "Request processed in degraded mode");
+        response.put("timestamp", LocalDateTime.now().toString());
+
+        return ResponseEntity.ok(response);
     }
 
 }

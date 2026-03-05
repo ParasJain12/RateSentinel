@@ -1,11 +1,10 @@
 package com.ratesentinel.algorithm;
 
 import com.ratesentinel.model.RateLimitRule;
+import com.ratesentinel.service.RedisCircuitBreakerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RScript;
-import org.redisson.api.RedissonClient;
-import org.redisson.client.codec.LongCodec;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
@@ -21,10 +20,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FixedWindowAlgorithm implements RateLimitAlgorithm {
 
-    private final RedissonClient redissonClient;
+    private final RedisCircuitBreakerService circuitBreakerService;
     private String luaScript;
 
-    // Load lua script once at startup
     private String getLuaScript() {
         if (luaScript == null) {
             try {
@@ -41,56 +39,39 @@ public class FixedWindowAlgorithm implements RateLimitAlgorithm {
 
     @Override
     public RateLimitResult isAllowed(String identifier, RateLimitRule rule) {
-
-        // Build Redis key — unique per identifier + endpoint + algorithm
         String redisKey = buildKey(identifier, rule);
 
-        try {
-            RScript script = redissonClient.getScript(LongCodec.INSTANCE);
+        List<Long> result = circuitBreakerService.executeScript(
+                getLuaScript(),
+                RScript.ReturnType.MULTI,
+                Collections.singletonList(redisKey),
+                (long) rule.getLimitCount(),
+                (long) rule.getWindowSeconds()
+        );
 
-            // Execute Lua script atomically
-            List<Long> result = script.eval(
-                    RScript.Mode.READ_WRITE,
-                    getLuaScript(),
-                    RScript.ReturnType.MULTI,
-                    Collections.singletonList(redisKey),
-                    (long) rule.getLimitCount(),
-                    (long) rule.getWindowSeconds()
-            );
+        boolean allowed = result.get(0) == 1L;
+        int remaining = result.get(1).intValue();
+        long ttl = result.get(2);
+        long resetTime = Instant.now().getEpochSecond() + ttl;
 
-            boolean allowed = result.get(0) == 1L;
-            int remaining = result.get(1).intValue();
-            long ttl = result.get(2);
-            long resetTime = Instant.now().getEpochSecond() + ttl;
-
-            if (allowed) {
-                log.debug("ALLOW - Key: {}, Remaining: {}", redisKey, remaining);
-                return RateLimitResult.allowed(
-                        remaining, rule.getLimitCount(), resetTime, getAlgorithmName());
-            } else {
-                log.debug("BLOCK - Key: {}, RetryAfter: {}s", redisKey, ttl);
-                return RateLimitResult.blocked(
-                        rule.getLimitCount(), resetTime, ttl, getAlgorithmName());
-            }
-
-        } catch (Exception e) {
-            log.error("Redis error in FixedWindowAlgorithm: {}", e.getMessage());
-            // Fail open — allow request if Redis is down
+        if (allowed) {
+            log.debug("ALLOW - FixedWindow - Key: {}, Remaining: {}",
+                    redisKey, remaining);
             return RateLimitResult.allowed(
-                    -1, rule.getLimitCount(), 0, getAlgorithmName());
+                    remaining, rule.getLimitCount(), resetTime, getAlgorithmName());
+        } else {
+            log.debug("BLOCK - FixedWindow - Key: {}, RetryAfter: {}s",
+                    redisKey, ttl);
+            return RateLimitResult.blocked(
+                    rule.getLimitCount(), resetTime, ttl, getAlgorithmName());
         }
     }
 
     @Override
-    public String getAlgorithmName() {
-        return "FIXED_WINDOW";
-    }
+    public String getAlgorithmName() { return "FIXED_WINDOW"; }
 
     private String buildKey(String identifier, RateLimitRule rule) {
         return String.format("rate:fixed:%s:%s:%s",
-                identifier,
-                rule.getEndpointPattern(),
-                rule.getHttpMethod());
+                identifier, rule.getEndpointPattern(), rule.getHttpMethod());
     }
-
 }

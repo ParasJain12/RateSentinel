@@ -2,6 +2,7 @@ package com.ratesentinel.controller;
 
 import com.ratesentinel.dto.AnalyticsDTO;
 import com.ratesentinel.service.AnalyticsService;
+import com.ratesentinel.service.RedisCircuitBreakerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.util.Map;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
+    private final RedisCircuitBreakerService circuitBreakerService;
 
     // Main dashboard data
     @GetMapping("/dashboard")
@@ -34,6 +36,12 @@ public class AnalyticsController {
     public ResponseEntity<List<Map<String, Object>>> getRecentLogs(
             @RequestParam(defaultValue = "50") int limit) {
         return ResponseEntity.ok(analyticsService.getRecentLogs(limit));
+    }
+
+    @GetMapping("/circuit-breaker")
+    public ResponseEntity<RedisCircuitBreakerService.CircuitBreakerMetrics>
+    getCircuitBreakerStatus() {
+        return ResponseEntity.ok(circuitBreakerService.getMetrics());
     }
 
 }
