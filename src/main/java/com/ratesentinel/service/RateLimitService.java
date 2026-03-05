@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -26,6 +25,7 @@ public class RateLimitService {
     private final WhitelistRepository whitelistRepository;
     private final BlacklistRepository blacklistRepository;
     private final AlertService alertService;
+    private final RuleConfigService ruleConfigService;
 
     /**
      * MAIN METHOD — Called by interceptor for every incoming request
@@ -115,21 +115,9 @@ public class RateLimitService {
      */
     private Optional<RateLimitRule> findMatchingRule(String endpoint,
                                                      String httpMethod) {
-        // Try exact match first
-        Optional<RateLimitRule> exactMatch = ruleRepository
-                .findByEndpointPatternAndHttpMethod(endpoint, httpMethod);
-
-        if (exactMatch.isPresent() && exactMatch.get().getIsActive()) {
-            return exactMatch;
-        }
-
-        // Try wildcard match — find active rules and check pattern
-        List<RateLimitRule> activeRules = ruleRepository.findByIsActiveTrue();
-
-        return activeRules.stream()
-                .filter(rule -> matchesPattern(endpoint, rule.getEndpointPattern())
-                        && rule.getHttpMethod().equals(httpMethod))
-                .findFirst();
+        // Now uses Redis cache instead of MySQL directly
+        // MySQL only hit on first request or after cache invalidation
+        return ruleConfigService.findMatchingRuleCached(endpoint, httpMethod);
     }
 
     /**
