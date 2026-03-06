@@ -28,6 +28,8 @@ class AlgorithmTest {
     private FixedWindowAlgorithm fixedWindowAlgorithm;
     private SlidingWindowLogAlgorithm slidingWindowAlgorithm;
     private TokenBucketAlgorithm tokenBucketAlgorithm;
+    private SlidingWindowCounterAlgorithm slidingWindowCounterAlgorithm;
+    private LeakyBucketAlgorithm leakyBucketAlgorithm;
 
     private RateLimitRule testRule;
 
@@ -36,6 +38,10 @@ class AlgorithmTest {
         fixedWindowAlgorithm = new FixedWindowAlgorithm(circuitBreakerService);
         slidingWindowAlgorithm = new SlidingWindowLogAlgorithm(circuitBreakerService);
         tokenBucketAlgorithm = new TokenBucketAlgorithm(circuitBreakerService);
+        slidingWindowCounterAlgorithm =
+                new SlidingWindowCounterAlgorithm(circuitBreakerService);
+        leakyBucketAlgorithm =
+                new LeakyBucketAlgorithm(circuitBreakerService);
 
         testRule = RateLimitRule.builder()
                 .endpointPattern("/api/test")
@@ -187,7 +193,9 @@ class AlgorithmTest {
         AlgorithmFactory factory = new AlgorithmFactory(
                 fixedWindowAlgorithm,
                 slidingWindowAlgorithm,
-                tokenBucketAlgorithm
+                slidingWindowCounterAlgorithm,
+                tokenBucketAlgorithm,
+                leakyBucketAlgorithm
         );
 
         assertThat(factory.getAlgorithm(AlgorithmType.FIXED_WINDOW))
@@ -200,4 +208,124 @@ class AlgorithmTest {
                 .isInstanceOf(TokenBucketAlgorithm.class);
     }
 
+    // ─── SLIDING WINDOW COUNTER TESTS ─────────────────────────
+
+    @Test
+    @DisplayName("Sliding Window Counter - Should ALLOW when under limit")
+    void slidingWindowCounter_shouldAllowWhenUnderLimit() {
+        when(circuitBreakerService.executeScript(
+                anyString(), any(), anyList(), any()))
+                .thenReturn(List.of(1L, 9L, 60L));
+
+        RateLimitResult result = slidingWindowCounterAlgorithm
+                .isAllowed("192.168.1.1", testRule);
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getAlgorithmUsed())
+                .isEqualTo("SLIDING_WINDOW_COUNTER");
+    }
+
+    @Test
+    @DisplayName("Sliding Window Counter - Should BLOCK when limit exceeded")
+    void slidingWindowCounter_shouldBlockWhenLimitExceeded() {
+        when(circuitBreakerService.executeScript(
+                anyString(), any(), anyList(), any()))
+                .thenReturn(List.of(0L, 0L, 30L));
+
+        RateLimitResult result = slidingWindowCounterAlgorithm
+                .isAllowed("192.168.1.1", testRule);
+
+        assertThat(result.isAllowed()).isFalse();
+        assertThat(result.getRetryAfterSeconds()).isEqualTo(30L);
+    }
+
+    @Test
+    @DisplayName("Sliding Window Counter - Uses two Redis keys")
+    void slidingWindowCounter_usesTwoRedisKeys() {
+        when(circuitBreakerService.executeScript(
+                anyString(), any(), anyList(), any()))
+                .thenReturn(List.of(1L, 9L, 60L));
+
+        slidingWindowCounterAlgorithm.isAllowed("192.168.1.1", testRule);
+
+        // Verify it was called with 2 keys (current + previous window)
+        verify(circuitBreakerService).executeScript(
+                anyString(), any(),
+                argThat(keys -> keys.size() == 2),
+                any()
+        );
+    }
+
+// ─── LEAKY BUCKET TESTS ────────────────────────────────────
+
+    @Test
+    @DisplayName("Leaky Bucket - Should ALLOW when bucket not full")
+    void leakyBucket_shouldAllowWhenBucketNotFull() {
+        when(circuitBreakerService.executeScript(
+                anyString(), any(), anyList(), any()))
+                .thenReturn(List.of(1L, 8L, 0L));
+
+        RateLimitResult result = leakyBucketAlgorithm
+                .isAllowed("192.168.1.1", testRule);
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getAlgorithmUsed()).isEqualTo("LEAKY_BUCKET");
+    }
+
+    @Test
+    @DisplayName("Leaky Bucket - Should BLOCK when bucket full")
+    void leakyBucket_shouldBlockWhenBucketFull() {
+        when(circuitBreakerService.executeScript(
+                anyString(), any(), anyList(), any()))
+                .thenReturn(List.of(0L, 0L, 10L));
+
+        RateLimitResult result = leakyBucketAlgorithm
+                .isAllowed("192.168.1.1", testRule);
+
+        assertThat(result.isAllowed()).isFalse();
+        assertThat(result.getRetryAfterSeconds()).isEqualTo(10L);
+    }
+
+    @Test
+    @DisplayName("Leaky Bucket - Smooth traffic, no burst allowed")
+    void leakyBucket_smoothTrafficNoBurst() {
+        // First call allowed
+        when(circuitBreakerService.executeScript(
+                anyString(), any(), anyList(), any()))
+                .thenReturn(List.of(1L, 4L, 0L))  // first call
+                .thenReturn(List.of(0L, 0L, 5L)); // second call blocked immediately
+
+        RateLimitResult first = leakyBucketAlgorithm
+                .isAllowed("192.168.1.1", testRule);
+        RateLimitResult second = leakyBucketAlgorithm
+                .isAllowed("192.168.1.1", testRule);
+
+        assertThat(first.isAllowed()).isTrue();
+        assertThat(second.isAllowed()).isFalse();
+    }
+
+// ─── UPDATED FACTORY TEST ──────────────────────────────────
+
+    @Test
+    @DisplayName("Algorithm Factory - Returns all 5 algorithms correctly")
+    void algorithmFactory_returnsAllFiveAlgorithms() {
+        AlgorithmFactory factory = new AlgorithmFactory(
+                fixedWindowAlgorithm,
+                slidingWindowAlgorithm,
+                slidingWindowCounterAlgorithm,
+                tokenBucketAlgorithm,
+                leakyBucketAlgorithm
+        );
+
+        assertThat(factory.getAlgorithm(AlgorithmType.FIXED_WINDOW))
+                .isInstanceOf(FixedWindowAlgorithm.class);
+        assertThat(factory.getAlgorithm(AlgorithmType.SLIDING_WINDOW_LOG))
+                .isInstanceOf(SlidingWindowLogAlgorithm.class);
+        assertThat(factory.getAlgorithm(AlgorithmType.SLIDING_WINDOW_COUNTER))
+                .isInstanceOf(SlidingWindowCounterAlgorithm.class);
+        assertThat(factory.getAlgorithm(AlgorithmType.TOKEN_BUCKET))
+                .isInstanceOf(TokenBucketAlgorithm.class);
+        assertThat(factory.getAlgorithm(AlgorithmType.LEAKY_BUCKET))
+                .isInstanceOf(LeakyBucketAlgorithm.class);
+    }
 }

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd">
+
+    <changeSet id="004" author="paras">
+        <createTable tableName="tier_configs">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tier_name" type="VARCHAR(50)">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="limit_count" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="window_seconds" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="algorithm" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="is_active" type="BOOLEAN"
+                    defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="VARCHAR(255)"/>
+            <column name="created_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP"/>
+            <column name="updated_at" type="TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP"/>
+        </createTable>
+
+        <!-- Insert default tier configurations -->
+        <insert tableName="tier_configs">
+            <column name="tier_name" value="FREE"/>
+            <column name="limit_count" valueNumeric="10"/>
+            <column name="window_seconds" valueNumeric="60"/>
+            <column name="algorithm" value="FIXED_WINDOW"/>
+            <column name="is_active" valueBoolean="true"/>
+            <column name="description" value="Free tier - 10 requests per minute"/>
+        </insert>
+
+        <insert tableName="tier_configs">
+            <column name="tier_name" value="PRO"/>
+            <column name="limit_count" valueNumeric="100"/>
+            <column name="window_seconds" valueNumeric="60"/>
+            <column name="algorithm" value="SLIDING_WINDOW_COUNTER"/>
+            <column name="is_active" valueBoolean="true"/>
+            <column name="description" value="Pro tier - 100 requests per minute"/>
+        </insert>
+
+        <insert tableName="tier_configs">
+            <column name="tier_name" value="ENTERPRISE"/>
+            <column name="limit_count" valueNumeric="1000"/>
+            <column name="window_seconds" valueNumeric="60"/>
+            <column name="algorithm" value="TOKEN_BUCKET"/>
+            <column name="is_active" valueBoolean="true"/>
+            <column name="description"
+                    value="Enterprise tier - 1000 requests per minute"/>
+        </insert>
+
+        <insert tableName="tier_configs">
+            <column name="tier_name" value="INTERNAL"/>
+            <column name="limit_count" valueNumeric="999999"/>
+            <column name="window_seconds" valueNumeric="60"/>
+            <column name="algorithm" value="FIXED_WINDOW"/>
+            <column name="is_active" valueBoolean="true"/>
+            <column name="description"
+                    value="Internal - effectively unlimited"/>
+        </insert>
+    </changeSet>
+
+</databaseChangeLog>

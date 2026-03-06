@@ -12,24 +12,24 @@ public class AlgorithmFactory {
 
     private final FixedWindowAlgorithm fixedWindowAlgorithm;
     private final SlidingWindowLogAlgorithm slidingWindowLogAlgorithm;
+    private final SlidingWindowCounterAlgorithm slidingWindowCounterAlgorithm;
     private final TokenBucketAlgorithm tokenBucketAlgorithm;
+    private final LeakyBucketAlgorithm leakyBucketAlgorithm;
 
     public RateLimitAlgorithm getAlgorithm(AlgorithmType type) {
         switch (type) {
             case FIXED_WINDOW:
                 return fixedWindowAlgorithm;
             case SLIDING_WINDOW_LOG:
-            case SLIDING_WINDOW_COUNTER:
                 return slidingWindowLogAlgorithm;
+            case SLIDING_WINDOW_COUNTER:
+                return slidingWindowCounterAlgorithm;
             case TOKEN_BUCKET:
                 return tokenBucketAlgorithm;
             case LEAKY_BUCKET:
-                // Falls back to sliding window for now
-                // We will implement this separately
-                log.warn("LeakyBucket not yet implemented, using SlidingWindow");
-                return slidingWindowLogAlgorithm;
+                return leakyBucketAlgorithm;
             default:
-                log.warn("Unknown algorithm type {}, using FixedWindow", type);
+                log.warn("Unknown algorithm {}, using FixedWindow", type);
                 return fixedWindowAlgorithm;
         }
     }

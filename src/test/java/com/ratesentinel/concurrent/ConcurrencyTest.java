@@ -1,9 +1,6 @@
 package com.ratesentinel.concurrent;
 
-import com.ratesentinel.algorithm.FixedWindowAlgorithm;
-import com.ratesentinel.algorithm.RateLimitResult;
-import com.ratesentinel.algorithm.SlidingWindowLogAlgorithm;
-import com.ratesentinel.algorithm.TokenBucketAlgorithm;
+import com.ratesentinel.algorithm.*;
 import com.ratesentinel.model.AlgorithmType;
 import com.ratesentinel.model.IdentifierType;
 import com.ratesentinel.model.RateLimitRule;
@@ -42,6 +39,8 @@ class ConcurrencyTest {
     private static FixedWindowAlgorithm fixedWindowAlgorithm;
     private static SlidingWindowLogAlgorithm slidingWindowAlgorithm;
     private static TokenBucketAlgorithm tokenBucketAlgorithm;
+    private static SlidingWindowCounterAlgorithm slidingWindowCounterAlgorithm;
+    private static LeakyBucketAlgorithm leakyBucketAlgorithm;
 
     @BeforeAll
     static void setUp() {
@@ -71,6 +70,10 @@ class ConcurrencyTest {
         fixedWindowAlgorithm = new FixedWindowAlgorithm(circuitBreakerService);
         slidingWindowAlgorithm = new SlidingWindowLogAlgorithm(circuitBreakerService);
         tokenBucketAlgorithm = new TokenBucketAlgorithm(circuitBreakerService);
+        slidingWindowCounterAlgorithm =
+                new SlidingWindowCounterAlgorithm(circuitBreakerService);
+        leakyBucketAlgorithm =
+                new LeakyBucketAlgorithm(circuitBreakerService);
     }
 
     @AfterAll
@@ -428,6 +431,122 @@ class ConcurrencyTest {
                 .identifierType(IdentifierType.IP_ADDRESS)
                 .isActive(true)
                 .build();
+    }
+
+    // ─── TEST 6 ────────────────────────────────────────────────
+
+    @Test
+    @Order(6)
+    @DisplayName("TEST 6 - Sliding Window Counter concurrency")
+    void slidingWindowCounterConcurrency() throws InterruptedException {
+
+        System.out.println("\n" + "=".repeat(60));
+        System.out.println("TEST 6: Sliding Window Counter concurrency");
+        System.out.println("Limit: 15 | Threads: 50");
+        System.out.println("=".repeat(60));
+
+        int LIMIT = 15;
+        int TOTAL_THREADS = 50;
+
+        RateLimitRule rule = buildRule(
+                LIMIT, 60, AlgorithmType.SLIDING_WINDOW_COUNTER);
+
+        AtomicInteger allowedCount = new AtomicInteger(0);
+        AtomicInteger blockedCount = new AtomicInteger(0);
+
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(TOTAL_THREADS);
+        ExecutorService executor = Executors.newFixedThreadPool(TOTAL_THREADS);
+
+        for (int i = 0; i < TOTAL_THREADS; i++) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    RateLimitResult result = slidingWindowCounterAlgorithm
+                            .isAllowed("test-swc", rule);
+                    if (result.isAllowed()) allowedCount.incrementAndGet();
+                    else blockedCount.incrementAndGet();
+                } catch (Exception e) {
+                    blockedCount.incrementAndGet();
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await(30, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        System.out.println("Allowed: " + allowedCount.get());
+        System.out.println("Blocked: " + blockedCount.get());
+
+        // Sliding window counter allows up to LIMIT
+        // Small variance possible due to weighted formula
+        assertThat(allowedCount.get())
+                .as("Sliding window counter allowed within acceptable range")
+                .isBetween(LIMIT - 2, LIMIT + 2);
+
+        System.out.println("✅ TEST 6 PASSED - Sliding Window Counter confirmed!");
+    }
+
+// ─── TEST 7 ────────────────────────────────────────────────
+
+    @Test
+    @Order(7)
+    @DisplayName("TEST 7 - Leaky Bucket smooth traffic enforcement")
+    void leakyBucketConcurrency() throws InterruptedException {
+
+        System.out.println("\n" + "=".repeat(60));
+        System.out.println("TEST 7: Leaky Bucket concurrency");
+        System.out.println("Limit: 10 | Threads: 40");
+        System.out.println("=".repeat(60));
+
+        int LIMIT = 10;
+        int TOTAL_THREADS = 40;
+
+        RateLimitRule rule = buildRule(
+                LIMIT, 60, AlgorithmType.LEAKY_BUCKET);
+
+        AtomicInteger allowedCount = new AtomicInteger(0);
+        AtomicInteger blockedCount = new AtomicInteger(0);
+
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(TOTAL_THREADS);
+        ExecutorService executor = Executors.newFixedThreadPool(TOTAL_THREADS);
+
+        for (int i = 0; i < TOTAL_THREADS; i++) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    RateLimitResult result = leakyBucketAlgorithm
+                            .isAllowed("test-leaky", rule);
+                    if (result.isAllowed()) allowedCount.incrementAndGet();
+                    else blockedCount.incrementAndGet();
+                } catch (Exception e) {
+                    blockedCount.incrementAndGet();
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await(30, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        System.out.println("Allowed: " + allowedCount.get());
+        System.out.println("Blocked: " + blockedCount.get());
+
+        assertThat(allowedCount.get())
+                .as("Leaky bucket allowed within acceptable tolerance")
+                .isBetween(LIMIT - 2, LIMIT + 2);
+
+        assertThat(blockedCount.get())
+                .as("Excess requests should be blocked")
+                .isGreaterThan(0);
+
+        System.out.println("✅ TEST 7 PASSED - Leaky Bucket smooth traffic confirmed!");
     }
 
 }

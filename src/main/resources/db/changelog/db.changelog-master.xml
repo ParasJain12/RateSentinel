@@ -8,5 +8,6 @@
     <include file="db/changelog/001-create-rules-table.xml"/>
     <include file="db/changelog/002-create-logs-table.xml"/>
     <include file="db/changelog/003-create-whitelist-blacklist.xml"/>
+    <include file="db/changelog/004-create-tier-config-table.xml"/>
 
 </databaseChangeLog>

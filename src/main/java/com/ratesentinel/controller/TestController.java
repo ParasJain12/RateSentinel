@@ -108,4 +108,55 @@ public class TestController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/search")
+    @RateLimit(
+            limit = 20,
+            windowSeconds = 60,
+            algorithm = "SLIDING_WINDOW_COUNTER",
+            identifierType = "IP_ADDRESS"
+    )
+    public ResponseEntity<Map<String, Object>> search(
+            @RequestParam(required = false) String query) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Search endpoint");
+        response.put("query", query);
+        response.put("timestamp", LocalDateTime.now().toString());
+        response.put("ruleType", "ANNOTATION_RULE - SLIDING_WINDOW_COUNTER");
+        return ResponseEntity.ok(response);
+    }
+
+    // Leaky Bucket — smoothest traffic, no bursting allowed
+    @PostMapping("/upload")
+    @RateLimit(
+            limit = 5,
+            windowSeconds = 60,
+            algorithm = "LEAKY_BUCKET",
+            identifierType = "IP_ADDRESS"
+    )
+    public ResponseEntity<Map<String, Object>> upload(
+            @RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Upload endpoint - smooth rate limiting");
+        response.put("timestamp", LocalDateTime.now().toString());
+        response.put("ruleType", "ANNOTATION_RULE - LEAKY_BUCKET");
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/free-endpoint")
+    public ResponseEntity<Map<String, Object>> freeEndpoint(
+            @RequestHeader(value = "X-User-Tier", required = false)
+            String tier) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Free tier endpoint");
+        response.put("yourTier", tier != null ? tier : "NOT PROVIDED");
+        response.put("limits", Map.of(
+                "FREE", "10 req/min",
+                "PRO", "100 req/min",
+                "ENTERPRISE", "1000 req/min",
+                "INTERNAL", "Unlimited"
+        ));
+        response.put("timestamp", LocalDateTime.now().toString());
+        return ResponseEntity.ok(response);
+    }
+
 }
