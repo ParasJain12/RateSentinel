@@ -146,6 +146,12 @@
             <version>4.2.0</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- JDBC Template for health check queries -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
