@@ -7,6 +7,8 @@ import com.ratesentinel.dto.RateLimitDecisionDTO;
 import com.ratesentinel.exception.RateLimitExceededException;
 import com.ratesentinel.model.*;
 import com.ratesentinel.repository.*;
+import com.ratesentinel.websocket.DashboardWebSocketService;
+import com.ratesentinel.websocket.RateLimitEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -26,6 +28,7 @@ public class RateLimitService {
     private final BlacklistRepository blacklistRepository;
     private final AlertService alertService;
     private final RuleConfigService ruleConfigService;
+    private final DashboardWebSocketService webSocketService;
 
     /**
      * MAIN METHOD — Called by interceptor for every incoming request
@@ -41,11 +44,25 @@ public class RateLimitService {
         // Blacklisted IPs are always blocked regardless of rate limits
         if (isBlacklisted(ipAddress)) {
             log.warn("BLACKLISTED IP blocked: {}", ipAddress);
-            RateLimitDecisionDTO decision = buildBlockedDecision(
+            RateLimitDecisionDTO blockedDecision = buildBlockedDecision(
                     ipAddress, endpoint, httpMethod, "IP_BLACKLISTED", 0, 0);
             logDecisionAsync(ipAddress, endpoint, httpMethod, "BLOCK",
                     "BLACKLIST", 0, ipAddress, null);
-            return decision;
+
+            // Push blacklist event to dashboard
+            webSocketService.pushRateLimitEvent(
+                    RateLimitEvent.builder()
+                            .eventType("BLACKLISTED")
+                            .identifier(ipAddress)
+                            .endpoint(endpoint)
+                            .httpMethod(httpMethod)
+                            .algorithm("BLACKLIST")
+                            .remaining(0)
+                            .totalLimit(0)
+                            .timestamp(java.time.LocalDateTime.now().toString())
+                            .build()
+            );
+            return blockedDecision;
         }
 
         // Step 2 — Check whitelist
@@ -79,13 +96,27 @@ public class RateLimitService {
         RateLimitResult result = algorithm.isAllowed(identifier, rule);
 
         // Step 6 — Log decision asynchronously (non-blocking)
+        String decision = result.isAllowed() ? "ALLOW" : "BLOCK";
         logDecisionAsync(
                 identifier, endpoint, httpMethod,
-                result.isAllowed() ? "ALLOW" : "BLOCK",
+                decision,
                 result.getAlgorithmUsed(),
                 result.getRemainingRequests(),
                 ipAddress,
                 null
+        );
+
+        webSocketService.pushRateLimitEvent(
+                RateLimitEvent.builder()
+                        .eventType(decision)
+                        .identifier(identifier)
+                        .endpoint(endpoint)
+                        .httpMethod(httpMethod)
+                        .algorithm(result.getAlgorithmUsed())
+                        .remaining(result.getRemainingRequests())
+                        .totalLimit(result.getTotalLimit())
+                        .timestamp(java.time.LocalDateTime.now().toString())
+                        .build()
         );
 
         // Step 7 — Check alert threshold if blocked
