@@ -415,7 +415,6 @@ src/main/resources/
 ## 👨‍💻 Author
 
 **Paras Jain**
-B.Tech CSE 2025 | Associate Software Engineer at WebKorps
 
 [![GitHub](https://img.shields.io/badge/GitHub-ParasJain12-181717?style=flat-square&logo=github)](https://github.com/ParasJain12)
 
