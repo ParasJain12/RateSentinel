@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: ratesentinel-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: rate_sentinel_db
+      MYSQL_USER: ratesentinel
+      MYSQL_PASSWORD: ratesentinel123
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - ratesentinel-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: ratesentinel-redis
+    ports:
+      - "6380:6379"
+    networks:
+      - ratesentinel-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RateSentinel App — Instance 1
+  app1:
+    build: .
+    container_name: ratesentinel-app1
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/rate_sentinel_db
+      SPRING_DATASOURCE_USERNAME: ratesentinel
+      SPRING_DATASOURCE_PASSWORD: ratesentinel123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8081:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ratesentinel-network
+    restart: on-failure
+
+  # RateSentinel App — Instance 2
+  app2:
+    build: .
+    container_name: ratesentinel-app2
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/rate_sentinel_db
+      SPRING_DATASOURCE_USERNAME: ratesentinel
+      SPRING_DATASOURCE_PASSWORD: ratesentinel123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8082:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ratesentinel-network
+    restart: on-failure
+
+  # RateSentinel App — Instance 3
+  app3:
+    build: .
+    container_name: ratesentinel-app3
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/rate_sentinel_db
+      SPRING_DATASOURCE_USERNAME: ratesentinel
+      SPRING_DATASOURCE_PASSWORD: ratesentinel123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8083:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ratesentinel-network
+    restart: on-failure
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: ratesentinel-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - app1
+      - app2
+      - app3
+    networks:
+      - ratesentinel-network
+    restart: on-failure
+
+networks:
+  ratesentinel-network:
+    driver: bridge
+
+volumes:
+  mysql_data:

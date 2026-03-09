@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ratesentinel-config
+  namespace: ratesentinel
+data:
+  SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-service:3306/rate_sentinel_db"
+  SPRING_DATASOURCE_USERNAME: "ratesentinel"
+  SPRING_DATA_REDIS_HOST: "redis-service"
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_PROFILES_ACTIVE: "prod"
